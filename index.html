@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>File Encryptor</title>
+</head>
+<body>
+<h2>Upload a File to Encrypt</h2>
+<input type="file" id="fileInput"><br><br>
+<button onclick="encryptFile()">Encrypt</button>
+<p id="status"></p>
+
+<script>
+const LOAD_BALANCER_URL = 'http://127.0.0.1:4000/send_task';
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+
+async function encryptFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file) {
+        alert('Please select a file!');
+        return;
+    }
+
+    const status = document.getElementById('status');
+    status.textContent = 'Encrypting...';
+
+    let offset = 0;
+    const encryptedChunks = [];
+
+    while (offset < file.size) {
+        const chunk = file.slice(offset, offset + CHUNK_SIZE);
+        const chunkArrayBuffer = await chunk.arrayBuffer();
+        const resp = await fetch(LOAD_BALANCER_URL, {
+            method: 'POST',
+            body: chunkArrayBuffer
+        });
+        const json = await resp.json();
+        if (json.error) {
+            status.textContent = 'Error: ' + json.error;
+            return;
+        }
+        encryptedChunks.push(json.result); // hex string
+        offset += CHUNK_SIZE;
+        status.textContent = `Encrypted ${Math.min(offset, file.size)} / ${file.size} bytes`;
+    }
+
+    // Combine all hex strings
+    const combined = encryptedChunks.join('');
+    const blob = new Blob([combined], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name + '.enc';
+    a.textContent = 'Download Encrypted File';
+    document.body.appendChild(a);
+
+    status.textContent = 'Encryption complete!';
+}
+</script>
+</body>
+</html>
