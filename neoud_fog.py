@@ -1,4 +1,5 @@
 # fog_node.py
+
 from flask import Flask, request, jsonify
 from prometheus_client import start_http_server, Gauge
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -6,7 +7,6 @@ import os, threading, time, psutil
 
 app = Flask(__name__)
 
-# Metrics
 cpu_gauge = Gauge('fog_cpu_percent', 'CPU usage percent')
 tasks_gauge = Gauge('fog_tasks_running', 'Number of tasks running')
 ram_gauge = Gauge('fog_ram_percent', 'RAM usage percent')
@@ -20,11 +20,9 @@ METRICS_PORT = 8000 + (PORT % 1000)
 def update_metrics():
     global tasks_running
     while True:
-        cpu = psutil.cpu_percent(interval=0.1)
-        ram = psutil.virtual_memory().percent
-        cpu_gauge.set(cpu)
+        cpu_gauge.set(psutil.cpu_percent(interval=0.1))
+        ram_gauge.set(psutil.virtual_memory().percent)
         tasks_gauge.set(tasks_running)
-        ram_gauge.set(ram)
         time.sleep(1)
 
 threading.Thread(target=update_metrics, daemon=True).start()
@@ -32,13 +30,11 @@ start_http_server(METRICS_PORT)
 
 @app.route("/health", methods=["GET"])
 def health():
-    cpu = psutil.cpu_percent(interval=0.05)
-    ram = psutil.virtual_memory().percent
     return jsonify({
         "status": "ok",
         "port": PORT,
-        "cpu_percent": cpu,
-        "ram_percent": ram,
+        "cpu_percent": psutil.cpu_percent(interval=0.05),
+        "ram_percent": psutil.virtual_memory().percent,
         "tasks_running": tasks_running
     })
 
@@ -46,26 +42,29 @@ def health():
 def task():
     global tasks_running
     chunk = request.data
+
     with lock:
         tasks_running += 1
+
     start_time = time.time()
+
     try:
         key = AESGCM.generate_key(bit_length=128)
         aes = AESGCM(key)
+
         nonce = os.urandom(12)
         ciphertext = aes.encrypt(nonce, chunk, None)
 
-        # Add delay to make task ~500ms
-        time.sleep(0.5)
+        processing_time = time.time() - start_time
 
-        proc_time = time.time() - start_time
         return jsonify({
             "result": ciphertext.hex(),
             "nonce": nonce.hex(),
             "key": key.hex(),
-            "processing_time": proc_time,
-            "node_used": f"{PORT}"
+            "processing_time": processing_time,
+            "node_used": PORT
         })
+
     finally:
         with lock:
             tasks_running -= 1
