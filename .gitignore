@@ -1,3 +1,4 @@
 data/lock
 data/*.lock
+venv/
 
