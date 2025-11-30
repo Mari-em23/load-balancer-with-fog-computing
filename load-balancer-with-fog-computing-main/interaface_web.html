@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Fog Load Balancer</title>
+</head>
+<body>
+    <h2>Chiffrement distribué via Fog Nodes</h2>
+
+    <input type="file" id="fileInput">
+    <button onclick="uploadFile()">Chiffrer</button>
+
+    <h3>Résultats</h3>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Chunk</th>
+                <th>Nœud utilisé</th>
+                <th>Temps de traitement</th>
+                <th>Temps total</th>
+            </tr>
+        </thead>
+        <tbody id="results"></tbody>
+    </table>
+
+<script>
+function uploadFile() {
+    const file = document.getElementById("fileInput").files[0];
+    if (!file) { alert("Choisissez un fichier !"); return; }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    fetch("http://127.0.0.1:4000/process_file", {
+        method: "POST",
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        const tbody = document.getElementById("results");
+        tbody.innerHTML = "";
+
+        data.results.forEach(r => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${r.chunk}</td>
+                <td>${r.node_used}</td>
+                <td>${r.processing_time}</td>
+                <td>${r.total_time.toFixed(4)} s</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    });
+}
+</script>
+
+</body>
+</html>

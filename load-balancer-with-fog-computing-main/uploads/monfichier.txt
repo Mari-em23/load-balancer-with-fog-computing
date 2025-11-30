@@ -1,0 +1,160 @@
+      Le patron
+      "Adapter"
+
+
+136
+              Riadh BEN HALIMA [Design patterns]
+Le patron adapter :
+Les adaptateurs (1/7)
+
+
+
+
+                        Adaptateur                  Câble American du PC
+Prise Européenne
+
+
+
+
+                   L’adaptateur convertit une
+                   interface à une autre
+
+
+
+
+137
+                                                Riadh BEN HALIMA [Design patterns]
+Le patron adapter :
+Les adaptateurs dans l’OO (2/7)
+              Notre                              Classe du
+             système                             vendeur
+             existant
+
+
+           L’interface ne correspond par à ce qu’on a déjà codé.
+           Ça ne va pas marché!
+           (supposant qu’on ne peut pas changer de vendeur)
+
+
+        Notre                 Adaptateur                   Classe du
+       système                                             vendeur
+       existant
+
+
+
+      Même code             Nouveau code                Même code
+
+
+
+138
+                                                             Riadh BEN HALIMA [Design patterns]
+  Le patron adapter :
+  Dinde et Canard (3/7)
+    Supposant que le dinde marche et cancane comme le canard
+ Un canard peut cancaner et voler        Une simple implémentation du comportement du canard
+
+ public interface Duck{             public class MallardDuck implements Duck{
+ void quack();                          public void quack(){
+ void fly();                            System.out.println("Quack");}
+ }                                      public void fly(){
+                                        System.out.println("Fly");}
+                                    }
+
+public interface Turkey{            Le dinde ne cancane pas, mais glougloute
+void gobble();
+void fly();                         Le dinde peut voler (courte distance)
+}
+
+           public class WildTurkey implements Turkey{
+               public void gobble(){
+               System.out.println("Gobble");}
+               public void fly(){
+               System.out.println("Fly for a short distance");}
+     139   }
+                                                                   Riadh BEN HALIMA [Design patterns]
+Le patron adapter :
+L’adaptateur du dinde(4/7)
+   Supposons qu’on a un manque de canards et on va utiliser des
+    dindes à leur pace  Il faut écrire un "adapter"
+                                                     Respecter l’interface des canards
+
+               public class TurkeyAdapter implements Duck{
+               private Turkey turkey;
+               public TurkeyAdapter(Turkey turkey){
+               this.turkey=turkey;}
+                                               Une référence vers l’objet à adapter
+               @Override
+               public void quack(){
+                 turkey.gobble();
+               }
+               @Override                        Translation des méthodes
+               public void fly(){
+                 for(int i=0;i<5;i++)
+                     {turkey.fly();}
+               }
+               }
+
+
+    140
+                                                    Riadh BEN HALIMA [Design patterns]
+    Le patron adapter :
+     Testons l’adaptateur(5/7)
+          public class TestAdapter{
+          public static void main (String[] arg)
+          {
+              Duck mallard= new MallardDuck();
+              Turkey wild = new WildTurkey();
+              Duck turkeyAdapter = new TurkeyAdapter(wild);
+              Duck[] tab = new Duck[2];
+              tab[0] = mallard;
+              tab[1] = turkeyAdapter ;
+              for(int i =0; i<2;i++)
+              {
+                     tab[i].quack();
+                     tab[i].fly();
+              }
+
+          }
+          }
+   Donner le résultat d’exécution de cette classe
+
+    141
+                                                 Riadh BEN HALIMA [Design patterns]
+Le patron adapter (6/7)
+
+   Définition:      Adapter
+       Le patron Adapter convertit l’interface d’une classe à
+        une autre interface que le client attend. Les adaptateurs
+        permettent aux classes, aillant des interfaces incompatibles,
+        de travailler ensemble.
+
+
+
+
+    142
+                                               Riadh BEN HALIMA [Design patterns]
+Adapter :
+Le diagramme de classes du patron (7/7)
+
+
+                               <<interface>>
+          Client                   Target
+                            request()                   L’Adapter implémente
+                                                        l’interface Target
+
+
+
+
+ Le client voit seulement
+                                  Adapter                        Adaptee
+ l’interface Target.
+                            request()                     specificRequest()
+
+
+
+                             L’adapter est composé        Toutes les requêtes sont
+                             d’un Adaptee                 déléguées à Adaptee
+
+    143
+                                                     Riadh BEN HALIMA [Design patterns]
+
