@@ -1,9 +1,10 @@
 # parallel_client_verbose.py
 import requests, time
 from threading import Thread, Lock
+import os
 
-FILE_PATH = "500Mo_file.txt"
-CHUNK_SIZE = 1024*1024*50
+FILE_PATH = "2000Mo_file.txt"
+CHUNK_SIZE = 1024*1024*300  # 300 Mo
 LB_URL = "http://127.0.0.1:4000/send_task"
 OUTPUT_FILE = "results_verbose.txt"
 MAX_THREADS = 5
@@ -25,6 +26,7 @@ def send_chunk(index, chunk):
         results.append((index, data, elapsed))
         with open(OUTPUT_FILE, "a") as out_file:
             out_file.write(f"Chunk {index}\n")
+            out_file.write(f"Taille du chunk: {len(chunk)} bytes\n")
             out_file.write(f"Temps total mesuré client: {elapsed:.4f}s\n")
 
             if "error" in data:
@@ -39,8 +41,8 @@ def send_chunk(index, chunk):
                 out_file.write(f"Temps de traitement côté nœud: {processing_time:.4f}s\n")
                 out_file.write(f"Temps total côté LB: {total_time:.4f}s\n")
                 
-                # Affichage détaillé pour comprendre la répartition
-                print(f"[Chunk {index}] envoyé à {node_used}")
+                # Affichage pour suivi
+                print(f"[Chunk {index}] envoyé à {node_used}, taille = {len(chunk)} bytes")
                 print(f"  Temps nœud = {processing_time:.4f}s, Temps total LB = {total_time:.4f}s")
                 print(f"  Temps mesuré client = {elapsed:.4f}s")
 
@@ -48,12 +50,17 @@ def send_chunk(index, chunk):
 
 def main():
     threads = []
+    total_chunks_size = 0
+    file_size = os.path.getsize(FILE_PATH)
+
     with open(FILE_PATH, "rb") as f:
         index = 0
         while True:
             chunk = f.read(CHUNK_SIZE)
             if not chunk:
                 break
+
+            total_chunks_size += len(chunk)
 
             while len([t for t in threads if t.is_alive()]) >= MAX_THREADS:
                 time.sleep(0.1)
@@ -67,13 +74,20 @@ def main():
         t.join()
 
     print("Terminé. Résultats détaillés dans results_verbose.txt")
+    print(f"Nombre de chunks envoyés: {index}")
+    print(f"Taille totale des chunks: {total_chunks_size} bytes")
+    print(f"Taille du fichier original: {file_size} bytes")
+    if total_chunks_size == file_size:
+        print("✅ La somme des chunks correspond exactement à la taille du fichier")
+    else:
+        print("⚠️ La somme des chunks ne correspond pas à la taille du fichier")
 
 if __name__ == "__main__":
     with open(OUTPUT_FILE, "w") as f:
         f.write("Résultats détaillés des chunks\n" + "="*50 + "\n")
     
-    t_start = time.time()       # début du chronomètre
-    main()                      # exécution du client
-    t_end = time.time()         # fin du chronomètre
+    t_start = time.time()
+    main()
+    t_end = time.time()
     
     print(f"\nTemps total d’exécution du client: {t_end - t_start:.4f}s")
