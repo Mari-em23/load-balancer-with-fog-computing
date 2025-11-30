@@ -2,3 +2,4 @@ data/lock
 data/*.lock
 venv/
 results_verbose.txt
+*file.txt
