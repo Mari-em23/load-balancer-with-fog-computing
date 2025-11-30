@@ -1,93 +1,200 @@
-# parallel_client_verbose.py
-import requests, time
+# client_full.py
+from flask import Flask, request, jsonify, render_template_string
+import requests, os, time, random
 from threading import Thread, Lock
-import os
 
-FILE_PATH = "2000Mo_file.txt"
-CHUNK_SIZE = 1024*1024*300  # 300 Mo
-LB_URL = "http://127.0.0.1:4000/send_task"
-OUTPUT_FILE = "results_verbose.txt"
+app = Flask(__name__)
+
+# --- Configuration ---
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+CHUNK_SIZE = 1024 * 1024 * 300  # 300 Mo par chunk
 MAX_THREADS = 5
+
+FOG_NODES = [
+    "http://127.0.0.1:5001",
+    "http://127.0.0.1:5002",
+    "http://127.0.0.1:5003",
+]
 
 lock = Lock()
 results = []
 
+# --- HTML Interface ---
+UPLOAD_PAGE = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Fog Load Balancer</title>
+<style>
+body { font-family: Arial; background: #f0f2f5; margin:0; padding:20px; }
+h2 { text-align:center; }
+.upload-section { display:flex; justify-content:center; gap:10px; margin-bottom:20px; }
+input[type=file] { padding:5px; border-radius:5px; border:1px solid #ccc; }
+button { background:#4CAF50; color:white; padding:8px 16px; border:none; border-radius:5px; cursor:pointer; }
+button:hover { background:#45a049; }
+table { width:80%; margin:auto; border-collapse:collapse; background:white; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+th,td { padding:10px; text-align:center; border-bottom:1px solid #ddd; }
+th { background:#4CAF50; color:white; }
+tr:hover { background:#f1f1f1; }
+#results-message { text-align:center; margin-bottom:10px; color:#555; }
+</style>
+</head>
+<body>
+<h2>Chiffrement distribué via Fog Nodes</h2>
+<div class="upload-section">
+<input type="file" id="fileInput">
+<button onclick="uploadFile()">Chiffrer</button>
+<button onclick="getMetrics()">Voir CPU/RAM</button>
+</div>
+
+<div id="results-message"></div>
+
+<h3>Chunks</h3>
+<table>
+<thead>
+<tr><th>Chunk</th><th>Taille (bytes)</th><th>Nœud utilisé</th><th>Temps de traitement (s)</th><th>Temps total côté LB (s)</th></tr>
+</thead>
+<tbody id="results"></tbody>
+</table>
+
+<h3>Metrics des nœuds</h3>
+<table>
+<thead>
+<tr><th>Nœud</th><th>CPU %</th><th>RAM %</th><th>Tasks en cours</th></tr>
+</thead>
+<tbody id="metrics"></tbody>
+</table>
+
+<script>
+async function uploadFile() {
+    const file = document.getElementById("fileInput").files[0];
+    if(!file) { alert("Choisissez un fichier !"); return; }
+    const formData = new FormData();
+    formData.append("file", file);
+    document.getElementById("results-message").innerText = "Chargement et chiffrement en cours...";
+    try {
+        const res = await fetch("/process_file", { method:"POST", body:formData });
+        const data = await res.json();
+        const tbody = document.getElementById("results");
+        tbody.innerHTML = "";
+        if(data.error){ document.getElementById("results-message").innerText="Erreur : "+data.error; return; }
+        document.getElementById("results-message").innerText=`${data.num_chunks} chunks traités, taille totale: ${data.total_chunks_size} bytes`;
+        data.results.forEach(r=>{
+            const tr=document.createElement("tr");
+            tr.innerHTML=`
+                <td>${r.chunk}</td>
+                <td>${r.chunk_size}</td>
+                <td>${r.node_used}</td>
+                <td>${r.processing_time.toFixed(4)}</td>
+                <td>${r.total_time.toFixed(4)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch(err){ document.getElementById("results-message").innerText="Erreur : "+err; }
+}
+
+async function getMetrics() {
+    try {
+        const res = await fetch("/metrics");
+        const data = await res.json();
+        const tbody = document.getElementById("metrics");
+        tbody.innerHTML = "";
+        data.forEach(node=>{
+            const tr=document.createElement("tr");
+            if(node.error){
+                tr.innerHTML=`<td>${node.node}</td><td colspan="3">Node unreachable</td>`;
+            } else {
+                tr.innerHTML=`<td>${node.port}</td><td>${node.cpu_percent}</td><td>${node.ram_percent}</td><td>${node.tasks_running}</td>`;
+            }
+            tbody.appendChild(tr);
+        });
+    } catch(err){ alert("Erreur: "+err); }
+}
+</script>
+</body>
+</html>
+"""
+
+# --- Fonctions de traitement ---
+def select_node():
+    return random.choice(FOG_NODES)
+
 def send_chunk(index, chunk):
+    global results
+    node = select_node()
     start = time.time()
     try:
-        resp = requests.post(LB_URL, data=chunk, timeout=90)
-        data = resp.json()
-    except Exception as e:
-        data = {"error": str(e)}
-
-    elapsed = time.time() - start
-
+        resp = requests.post(f"{node}/task", data=chunk, timeout=90)
+        resp.raise_for_status()
+        node_data = resp.json()
+    except:
+        node_data = {"node_used": node, "processing_time":0}
+    total = time.time() - start
     with lock:
-        results.append((index, data, elapsed))
-        with open(OUTPUT_FILE, "a") as out_file:
-            out_file.write(f"Chunk {index}\n")
-            out_file.write(f"Taille du chunk: {len(chunk)} bytes\n")
-            out_file.write(f"Temps total mesuré client: {elapsed:.4f}s\n")
+        results.append({
+            "chunk": index,
+            "chunk_size": len(chunk),
+            "node_used": node_data.get("node_used", node),
+            "processing_time": node_data.get("processing_time",0),
+            "total_time": total
+        })
 
-            if "error" in data:
-                out_file.write(f"Erreur: {data['error']}\n")
-                print(f"[Chunk {index}] -> Erreur: {data['error']}")
-            else:
-                node_used = data.get("node_used", "inconnu")
-                processing_time = data.get("processing_time", 0)
-                total_time = data.get("total_time", elapsed)
+# --- Routes Flask ---
+@app.route("/")
+def index():
+    return render_template_string(UPLOAD_PAGE)
 
-                out_file.write(f"Noeud utilisé: {node_used}\n")
-                out_file.write(f"Temps de traitement côté nœud: {processing_time:.4f}s\n")
-                out_file.write(f"Temps total côté LB: {total_time:.4f}s\n")
-                
-                # Affichage pour suivi
-                print(f"[Chunk {index}] envoyé à {node_used}, taille = {len(chunk)} bytes")
-                print(f"  Temps nœud = {processing_time:.4f}s, Temps total LB = {total_time:.4f}s")
-                print(f"  Temps mesuré client = {elapsed:.4f}s")
+@app.route("/process_file", methods=["POST"])
+def process_file():
+    global results
+    results = []
 
-            out_file.write("="*50 + "\n")
+    if "file" not in request.files:
+        return jsonify({"error":"Aucun fichier reçu"}),400
+    file = request.files["file"]
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(filepath)
 
-def main():
-    threads = []
-    total_chunks_size = 0
-    file_size = os.path.getsize(FILE_PATH)
-
-    with open(FILE_PATH, "rb") as f:
-        index = 0
+    chunks = []
+    with open(filepath,"rb") as f:
         while True:
-            chunk = f.read(CHUNK_SIZE)
-            if not chunk:
-                break
+            c = f.read(CHUNK_SIZE)
+            if not c: break
+            chunks.append(c)
 
-            total_chunks_size += len(chunk)
+    total_chunks_size = 0
+    threads = []
+    for idx,c in enumerate(chunks):
+        total_chunks_size += len(c)
+        while len([t for t in threads if t.is_alive()]) >= MAX_THREADS:
+            time.sleep(0.05)
+        t = Thread(target=send_chunk, args=(idx, c))
+        t.start()
+        threads.append(t)
+    for t in threads: t.join()
 
-            while len([t for t in threads if t.is_alive()]) >= MAX_THREADS:
-                time.sleep(0.1)
+    file_size = os.path.getsize(filepath)
+    return jsonify({
+        "results": results,
+        "num_chunks": len(chunks),
+        "total_chunks_size": total_chunks_size,
+        "file_size": file_size
+    })
 
-            t = Thread(target=send_chunk, args=(index, chunk))
-            t.start()
-            threads.append(t)
-            index += 1
+@app.route("/metrics", methods=["GET"])
+def get_metrics():
+    nodes_metrics = []
+    for node in FOG_NODES:
+        try:
+            r = requests.get(node+"/health", timeout=2)
+            r.raise_for_status()
+            nodes_metrics.append(r.json())
+        except:
+            nodes_metrics.append({"node":node,"error":"unreachable"})
+    return jsonify(nodes_metrics)
 
-    for t in threads:
-        t.join()
-
-    print("Terminé. Résultats détaillés dans results_verbose.txt")
-    print(f"Nombre de chunks envoyés: {index}")
-    print(f"Taille totale des chunks: {total_chunks_size} bytes")
-    print(f"Taille du fichier original: {file_size} bytes")
-    if total_chunks_size == file_size:
-        print("✅ La somme des chunks correspond exactement à la taille du fichier")
-    else:
-        print("⚠️ La somme des chunks ne correspond pas à la taille du fichier")
-
-if __name__ == "__main__":
-    with open(OUTPUT_FILE, "w") as f:
-        f.write("Résultats détaillés des chunks\n" + "="*50 + "\n")
-    
-    t_start = time.time()
-    main()
-    t_end = time.time()
-    
-    print(f"\nTemps total d’exécution du client: {t_end - t_start:.4f}s")
+# --- Lancement du serveur ---
+if __name__=="__main__":
+    app.run(host="0.0.0.0", port=5005, debug=True)
