@@ -4,12 +4,14 @@ from flask import Flask, request, jsonify
 from prometheus_client import start_http_server, Gauge
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os, threading, time, psutil
+from prometheus_client import Counter
 
 app = Flask(__name__)
 
 cpu_gauge = Gauge('fog_cpu_percent', 'CPU usage percent')
 tasks_gauge = Gauge('fog_tasks_running', 'Number of tasks running')
 ram_gauge = Gauge('fog_ram_percent', 'RAM usage percent')
+chunks_counter = Counter('chunks_processed_total', 'Total chunks processed', ['node', 'file'])
 
 tasks_running = 0
 lock = threading.Lock()
@@ -56,6 +58,9 @@ def task():
         ciphertext = aes.encrypt(nonce, chunk, None)
 
         processing_time = time.time() - start_time
+        file_name = request.headers.get('X-File-Name', 'unknown')
+        chunks_counter.labels(node=str(PORT), file=file_name).inc()
+
 
         return jsonify({
             "result": ciphertext.hex(),
