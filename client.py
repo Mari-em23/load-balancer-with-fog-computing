@@ -3,7 +3,7 @@ import requests, time
 from threading import Thread, Lock
 
 FILE_PATH = "500Mo_file.txt"
-CHUNK_SIZE = 1024*1024*20
+CHUNK_SIZE = 1024*1024*50
 LB_URL = "http://127.0.0.1:4000/send_task"
 OUTPUT_FILE = "results_verbose.txt"
 MAX_THREADS = 5

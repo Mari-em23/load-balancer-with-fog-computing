@@ -1,5 +1,5 @@
 sentence = "This is our cute big txt file that we will encrypt.\n"
-size_mo=50
+size_mo=500
 size = size_mo * 1024 * 1024  # 500 MB
 
 with open(str(size_mo)+"Mo_file.txt", "w", encoding="utf-8") as f:
