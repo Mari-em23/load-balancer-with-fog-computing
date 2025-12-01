@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Fog Load Balancer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+
+        .upload-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        input[type="file"] {
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        table {
+            width: 80%;
+            margin: auto;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        #results-message {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Chiffrement distribuée via Fog Nodes</h2>
+
+    <div class="upload-section">
+        <input type="file" id="fileInput">
+        <button onclick="uploadFile()">Chiffrer</button>
+    </div>
+
+    <div id="results-message"></div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Chunk</th>
+                <th>Nœud utilisé</th>
+                <th>Temps de traitement (s)</th>
+                <th>Temps total côté LB (s)</th>
+            </tr>
+        </thead>
+        <tbody id="results"></tbody>
+    </table>
+
+<script>
+async function uploadFile() {
+    const file = document.getElementById("fileInput").files[0];
+    if (!file) { 
+        alert("Choisissez un fichier !"); 
+        return; 
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    document.getElementById("results-message").innerText = "Chargement et chiffrement en cours...";
+
+    try {
+       const response = await fetch("http://127.0.0.1:5005/process_file", {
+        method: "POST",
+        body: formData
+});
+
+        const data = await response.json();
+
+        const tbody = document.getElementById("results");
+        tbody.innerHTML = "";
+
+        if (data.error) {
+            document.getElementById("results-message").innerText = "Erreur : " + data.error;
+            return;
+        }
+
+        document.getElementById("results-message").innerText = `${data.results.length} chunks traités`;
+
+        data.results.forEach(r => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${r.chunk}</td>
+                <td>${r.node_used}</td>
+                <td>${r.processing_time.toFixed(4)}</td>
+                <td>${r.total_time.toFixed(4)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+    } catch (err) {
+        document.getElementById("results-message").innerText = "Erreur lors de la requête : " + err;
+    }
+}
+</script>
+
+</body>
+</html>

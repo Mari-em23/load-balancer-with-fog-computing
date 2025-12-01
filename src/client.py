@@ -5,8 +5,6 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "uploads_client"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# URL du Load Balancer Random
-LOAD_BALANCER_URL = "http://127.0.0.1:5005"
 
 UPLOAD_PAGE = """ 
 <!DOCTYPE html>
@@ -44,7 +42,7 @@ tr:hover { background:#f1f1f1; }
 <input type="file" id="fileInput">
 <select id="lbType">
     <option value="random">Random</option>
-    <option value="hybrid">Hybrid</option>
+    <option value="round robin">Round Robin</option>
     <option value="algo">Algo</option>
 </select>
 <button onclick="uploadFile()">Chiffrer</button>
@@ -164,7 +162,15 @@ def send_file():
     num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
     lb_type = request.form.get("lb_type", "random")
+    
+    if lb_type == "random":
+        LOAD_BALANCER_URL = "http://127.0.0.1:5005"
+    elif lb_type == "algo":
+        LOAD_BALANCER_URL = "http://127.0.0.1:5004"
+    else :
+        LOAD_BALANCER_URL = "http://127.0.0.1:5006"
 
+        
     with open(filepath, "rb") as f:
         files = {"file": (file.filename, f)}
         data = {"num_chunks": num_chunks, "lb_type": lb_type}
@@ -189,4 +195,4 @@ def get_metrics():
     return jsonify(metrics)
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0", port=4000)
+    app.run(host="0.0.0.0", port=4444)

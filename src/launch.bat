@@ -7,6 +7,13 @@ start cmd /k "python src/fog_node.py"
 start cmd /k "python src/fog_node2.py"
 start cmd /k "python src/fog_node3.py"
 
+REM =============================
+REM Choix de l'algorithme pour le load balancer
+REM =============================
+start cmd /k "python src/load_balancer_algo.py"
+start cmd /k "python src/load_balancer_random.py"
+start cmd /k "python src/load_balancer_rr.py"
+
 
 REM =============================
 REM Lancer le client (interface HTML)

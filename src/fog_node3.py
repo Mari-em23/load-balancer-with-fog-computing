@@ -61,7 +61,6 @@ def task():
         file_name = request.headers.get('X-File-Name', 'unknown')
         chunks_counter.labels(node=str(PORT), file=file_name).inc()
 
-
         return jsonify({
             "result": ciphertext.hex(),
             "nonce": nonce.hex(),

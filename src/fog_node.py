@@ -51,7 +51,7 @@ def task():
     start_time = time.time()
 
     try:
-        key = "13b3cc0b72e7792d687d3bd166799595".encode()
+        key = AESGCM.generate_key(bit_length=128)
         aes = AESGCM(key)
 
         nonce = os.urandom(12)
