@@ -7,19 +7,6 @@ start cmd /k "python src/fog_node.py"
 start cmd /k "python src/fog_node2.py"
 start cmd /k "python src/fog_node3.py"
 
-REM =============================
-REM Choix de l'algorithme pour le load balancer
-REM =============================
-echo Choisir l'algorithme :
-echo 1) Algo 
-echo 2) Random
-set /p choix=Votre choix (1 ou 2) : 
-
-if "%choix%"=="1" (
-    start cmd /k "python load_balancer_algo.py"
-) else (
-    start cmd /k "python load_balancer_random.py"
-)
 
 REM =============================
 REM Lancer le client (interface HTML)
