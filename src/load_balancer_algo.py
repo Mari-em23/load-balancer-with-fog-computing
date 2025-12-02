@@ -44,52 +44,61 @@ def select_node(chunk_size):
     best_node = min(node_scores, key=lambda n: node_scores[n])
     return best_node
 
-# --- Endpoint pour envoyer un chunk ---
-@app.route("/send_task", methods=["POST"])
+@app.route("/process_file", methods=["POST"])
 def send_task():
-    chunk = request.data
-    chunk_size = len(chunk)
-    tried_nodes = []
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file"}), 400
 
-    while len(tried_nodes) < len(FOG_NODES):
-        node = select_node(chunk_size)
-        if node in tried_nodes:
-            remaining = [n for n in FOG_NODES if n not in tried_nodes]
-            node = remaining[0]
+    chunk_size = 5 * 1024 * 1024
+    content = file.read()
+    num_chunks = (len(content) + chunk_size - 1) // chunk_size
+    results = []
 
-        start_time = time.time()
-        with LOCK:
-            local_tasks[node] += 1
+    for i in range(num_chunks):
+        chunk = content[i*chunk_size:(i+1)*chunk_size]
+        tried_nodes = []
 
-        try:
-            resp = requests.post(f"{node}/task", data=chunk, timeout=30)
-            node_resp = resp.json()
-        except Exception as e:
+        while len(tried_nodes) < len(FOG_NODES):
+            node = select_node(len(chunk))
+            if node in tried_nodes:
+                remaining = [n for n in FOG_NODES if n not in tried_nodes]
+                node = remaining[0]
+
+            start_time = time.time()
             with LOCK:
+                local_tasks[node] += 1
+
+            try:
+                resp = requests.post(f"{node}/task", data=chunk, timeout=30)
+                node_resp = resp.json()
+            except Exception:
+                with LOCK:
+                    local_tasks[node] -= 1
+                tried_nodes.append(node)
+                continue
+
+            elapsed = time.time() - start_time
+            with LOCK:
+                if node_kpi[node] is None:
+                    node_kpi[node] = elapsed
+                else:
+                    node_kpi[node] = ALPHA * elapsed + (1 - ALPHA) * node_kpi[node]
+                node_counts[node] += 1
                 local_tasks[node] -= 1
-            tried_nodes.append(node)
-            continue
 
-        elapsed = time.time() - start_time
+            results.append({
+                "chunk": i,
+                "node_used": node,
+                "result": node_resp.get("result"),
+                "processing_time": node_resp.get("processing_time", 0),
+                "total_time": elapsed
+            })
+            break  # break retry loop for this chunk
 
-        with LOCK:
-            if node_kpi[node] is None:
-                node_kpi[node] = elapsed
-            else:
-                node_kpi[node] = ALPHA * elapsed + (1 - ALPHA) * node_kpi[node]
-            node_counts[node] += 1
-            local_tasks[node] -= 1
+    return jsonify({"results": results})
 
-        return jsonify({
-            "node_used": node,
-            "result": node_resp.get('result'),
-            "processing_time": node_resp.get('processing_time', 0),
-            "total_time": elapsed
-        })
 
-    return jsonify({"error": "All nodes failed"}), 500
-
-# --- Endpoint pour vérifier l'état des nœuds ---
 @app.route("/nodes_status", methods=["GET"])
 def nodes_status():
     statuses = {}
@@ -108,4 +117,4 @@ def nodes_status():
     return jsonify(statuses)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5004)
+    app.run(host="0.0.0.0", port=5006)
