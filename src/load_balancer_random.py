@@ -50,6 +50,8 @@ def process_file():
         return jsonify({"error": "Aucun fichier reçu"}), 400
 
     lb_type = request.form.get("lb_type", "random")
+    if lb_type != "random":
+        return jsonify({"error": f"LB type {lb_type} non supporté par ce LB"}), 400
 
     file = request.files["file"]
     num_chunks = int(request.form.get("num_chunks", 0))
