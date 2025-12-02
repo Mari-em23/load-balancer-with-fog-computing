@@ -16,7 +16,7 @@ chunks_counter = Counter('chunks_processed_total', 'Total chunks processed', ['n
 tasks_running = 0
 lock = threading.Lock()
 
-PORT = int(os.environ.get("PORT", "5002"))
+PORT = int(os.environ.get("PORT", "5002))
 METRICS_PORT = 8000 + (PORT % 1000)
 
 def update_metrics():
@@ -60,6 +60,7 @@ def task():
         processing_time = time.time() - start_time
         file_name = request.headers.get('X-File-Name', 'unknown')
         chunks_counter.labels(node=str(PORT), file=file_name).inc()
+
 
         return jsonify({
             "result": ciphertext.hex(),
