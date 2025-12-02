@@ -1,10 +1,20 @@
-from flask import Flask, request, jsonify, render_template_string
-import requests, os
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
+import requests, os, shutil
 
 app = Flask(__name__)
+
 UPLOAD_FOLDER = "uploads_client"
+ENCRYPTED_FOLDER = "encrypted"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Map lbType to Load Balancer URLs
+LB_URLS = {
+    "random": "http://127.0.0.1:5005",
+    "algo": "http://127.0.0.1:5006",
+    "round_robin": "http://127.0.0.1:5007"
+}
+
+CHUNK_SIZE = 5 * 1024 * 1024
 
 UPLOAD_PAGE = """ 
 <!DOCTYPE html>
@@ -42,7 +52,7 @@ tr:hover { background:#f1f1f1; }
 <input type="file" id="fileInput">
 <select id="lbType">
     <option value="random">Random</option>
-    <option value="round robin">Round Robin</option>
+    <option value="round_robin">Round Robin</option>
     <option value="algo">Algo</option>
 </select>
 <button onclick="uploadFile()">Chiffrer</button>
@@ -67,6 +77,14 @@ tr:hover { background:#f1f1f1; }
 <tbody id="metrics"></tbody>
 </table>
 
+<div style="text-align:center; margin-top:20px;">
+    <a id="downloadLink" href="#" download style="display:none;">
+        <button style="background: linear-gradient(135deg,#43afc0,#6cd3d0); color:white; padding:10px 20px; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">
+            Télécharger le fichier chiffré
+        </button>
+    </a>
+</div>
+
 <script>
 async function uploadFile() {
     const file = document.getElementById("fileInput").files[0];
@@ -90,22 +108,39 @@ async function uploadFile() {
 
         const tbody = document.getElementById("results");
         tbody.innerHTML = "";
-        document.getElementById("results-message").innerText=`${data.results.length} chunks traités`;
 
-        data.results.forEach(r=>{
-            const tr=document.createElement("tr");
+        const results = data.results || [];
+        document.getElementById("results-message").innerText=`${results.length} chunks traités`;
+
+        results.forEach(r=>{
+            const tr = document.createElement("tr");
+
+            const processingTime = (r.processing_time != null) ? r.processing_time.toFixed(4) : "N/A";
+            const totalTime = (r.total_time != null) ? r.total_time.toFixed(4) : "N/A";
+            const nodeUsed = r.node_used || "Unknown";
+            const chunkIndex = r.chunk != null ? r.chunk : "N/A";
+
             tr.innerHTML=`
-                <td>${r.chunk}</td>
-                <td>${r.node_used}</td>
-                <td>${r.processing_time.toFixed(4)}</td>
-                <td>${r.total_time.toFixed(4)}</td>
+                <td>${chunkIndex}</td>
+                <td>${nodeUsed}</td>
+                <td>${processingTime}</td>
+                <td>${totalTime}</td>
             `;
             tbody.appendChild(tr);
         });
+
+        // Show download button
+        if (data.encrypted_file_url) {
+            const downloadLink = document.getElementById("downloadLink");
+            downloadLink.href = data.encrypted_file_url;
+            downloadLink.style.display = "inline-block";
+        }
+
     } catch(err){
         document.getElementById("results-message").innerText="Erreur : "+err;
     }
 }
+
 
 async function getMetrics() {
     try {
@@ -157,29 +192,35 @@ def send_file():
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
-    CHUNK_SIZE = 5 * 1024 * 1024
     file_size = os.path.getsize(filepath)
     num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
     lb_type = request.form.get("lb_type", "random")
-    
-    if lb_type == "random":
-        LOAD_BALANCER_URL = "http://127.0.0.1:5005"
-    elif lb_type == "algo":
-        LOAD_BALANCER_URL = "http://127.0.0.1:5004"
-    else :
-        LOAD_BALANCER_URL = "http://127.0.0.1:5006"
+    lb_url = LB_URLS.get(lb_type, LB_URLS["random"])
 
-        
-    with open(filepath, "rb") as f:
-        files = {"file": (file.filename, f)}
-        data = {"num_chunks": num_chunks, "lb_type": lb_type}
-        try:
-            resp = requests.post(f"{LOAD_BALANCER_URL}/process_file", files=files, data=data)
+    resp_data = {}
+    try:
+        with open(filepath, "rb") as f:
+            files = {"file": (file.filename, f)}
+            data = {"num_chunks": num_chunks, "lb_type": lb_type}
+            resp = requests.post(f"{lb_url}/process_file", files=files, data=data)
             resp.raise_for_status()
-            return jsonify(resp.json())
-        except requests.exceptions.RequestException as e:
-            return jsonify({"error": str(e)}), 500
+            resp_data = resp.json()
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Save encrypted file (for demo, just copy original)
+    encrypted_file_path = os.path.join(ENCRYPTED_FOLDER, file.filename + ".enc")
+    shutil.copy(filepath, encrypted_file_path)
+    resp_data["encrypted_file_url"] = f"/download/{file.filename}.enc"
+
+    return jsonify(resp_data)
+
+
+@app.route("/download/<filename>")
+def download_file(filename):
+    return send_from_directory(ENCRYPTED_FOLDER, filename, as_attachment=True)
+
 
 @app.route("/metrics", methods=["GET"])
 def get_metrics():
@@ -194,5 +235,6 @@ def get_metrics():
             metrics.append({"node": node, "error": "unreachable"})
     return jsonify(metrics)
 
+
 if __name__=="__main__":
-    app.run(host="0.0.0.0", port=4444)
+    app.run(host="0.0.0.0", port=4000, debug=True)
