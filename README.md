@@ -15,5 +15,10 @@ Make sure you're inside your project folder, then run:
 
 pip install -r requirements.txt
             
-
-            
+# Installer les dépendances dans un environnement virtuel
+python -m venv venv
+source venv/bin/activate     # Linux/Mac
+venv\Scripts\activate        # Windows
+pip install flask
+          
+.\launch.bat

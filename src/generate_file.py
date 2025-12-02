@@ -1,5 +1,5 @@
 sentence = "This is our cute big txt file that we will encrypt.\n"
-size_mo = 2000
+size_mo = 50
 size_bytes = size_mo * 1024 * 1024
 
 repeats = size_bytes // len(sentence.encode("utf-8"))
