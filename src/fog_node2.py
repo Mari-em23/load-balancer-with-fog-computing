@@ -16,7 +16,7 @@ chunks_counter = Counter('chunks_processed_total', 'Total chunks processed', ['n
 tasks_running = 0
 lock = threading.Lock()
 
-PORT = int(os.environ.get("PORT", "5002))
+PORT = int(os.environ.get("PORT", "5002"))
 METRICS_PORT = 8000 + (PORT % 1000)
 
 def update_metrics():
